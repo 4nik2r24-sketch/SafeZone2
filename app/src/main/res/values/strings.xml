@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">SafeZone</string>
+    <string name="mapa_placeholder">[El mapa interactivo irá aquí]</string>
+    <string name="buscar_hint">Buscar sector o dirección...</string>
+    <string name="riesgo_extremo">RIESGO EXTREMO</string>
+    <string name="ejemplo_crimen">Robo a mano armada</string>
+    <string name="ejemplo_horario">Horario crítico: 22:00 a 04:30 hrs</string>
+    <string name="btn_ruta_segura">Solicitar Ruta Segura Alternativa</string>
+</resources>

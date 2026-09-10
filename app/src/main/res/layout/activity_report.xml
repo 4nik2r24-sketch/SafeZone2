@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0E18"
+    android:padding="20dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Botón para Volver -->
+        <TextView
+            android:id="@+id/btnVolverReporte"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="← Volver al Mapa"
+            android:textColor="#38BDF8"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp"
+            android:padding="8dp"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Reporte Rápido"
+            android:textColor="#EF4444"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp"/>
+
+        <!-- Menú Desplegable: Tipo de Crimen -->
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="¿Qué está sucediendo?"
+            app:hintTextColor="#94A3B8"
+            android:textColorHint="#94A3B8"
+            app:boxBackgroundColor="#171B26"
+            app:boxStrokeColor="#38BDF8"
+            android:layout_marginBottom="16dp">
+
+            <AutoCompleteTextView
+                android:id="@+id/dropTipoCrimen"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="none"
+                android:textColor="#FFFFFF" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Menú Desplegable: Horario -->
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="¿Cuándo ocurrió?"
+            app:hintTextColor="#94A3B8"
+            android:textColorHint="#94A3B8"
+            app:boxBackgroundColor="#171B26"
+            app:boxStrokeColor="#38BDF8"
+            android:layout_marginBottom="16dp">
+
+            <AutoCompleteTextView
+                android:id="@+id/dropHorario"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="none"
+                android:textColor="#FFFFFF" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Campo Rápido: Descripción -->
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Detalles o descripción (Opcional)"
+            app:hintTextColor="#94A3B8"
+            android:textColorHint="#94A3B8"
+            app:boxBackgroundColor="#171B26"
+            app:boxStrokeColor="#38BDF8"
+            android:layout_marginBottom="24dp">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etDescripcion"
+                android:layout_width="match_parent"
+                android:layout_height="100dp"
+                android:gravity="top|start"
+                android:inputType="textMultiLine"
+                android:textColor="#FFFFFF" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- Botón para obtener ubicación GPS al instante -->
+        <Button
+            android:id="@+id/btnUsarMiUbicacion"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:backgroundTint="#202636"
+            android:text="📍 Usar mi ubicación actual"
+            android:textColor="#38BDF8"
+            android:textAllCaps="false"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Botón de Envío de Emergencia -->
+        <Button
+            android:id="@+id/btnEnviarReporte"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:backgroundTint="#EF4444"
+            android:text="ENVIAR REPORTE AHORA"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:textSize="16sp"/>
+
+        <!-- Botón para ver el historial de reportes -->
+        <Button
+            android:id="@+id/btnVerHistorial"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:backgroundTint="#202636"
+            android:text="Ver historial de reportes de esta zona"
+            android:textAllCaps="false"
+            android:textColor="#94A3B8"
+            android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+    </LinearLayout>
+</ScrollView>
