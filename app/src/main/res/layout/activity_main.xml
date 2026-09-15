@@ -70,7 +70,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 app:cardBackgroundColor="#171B26"
-                app:cardCornerRadius="24dp">
+                app:cardCornerRadius="24dp"
+                android:layout_marginBottom="12dp">
                 <EditText
                     android:id="@+id/txtBuscar"
                     android:layout_width="match_parent"
@@ -83,6 +84,52 @@
                     android:paddingEnd="20dp"
                     android:textSize="14sp" />
             </com.google.android.material.card.MaterialCardView>
+
+            <!-- NUEVO: Botones de Modo de Mapa -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:weightSum="3">
+
+                <Button
+                    android:id="@+id/btnModoNormal"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:text="Mover"
+                    android:textSize="12sp"
+                    android:textColor="#000000"
+                    android:backgroundTint="#38BDF8"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"/>
+
+                <Button
+                    android:id="@+id/btnModoDibujo"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:text="Dibujar"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#2D3748"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"/>
+
+                <Button
+                    android:id="@+id/btnModoBorrar"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:text="Borrar"
+                    android:textSize="12sp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#2D3748"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"/>
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Barra de Navegación Inferior -->
@@ -100,7 +147,8 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_below="@+id/capaSuperior"
-            android:layout_above="@+id/bottomNavigation" />    </RelativeLayout>
+            android:layout_above="@+id/bottomNavigation" />
+    </RelativeLayout>
 
     <!-- BOTÓN SOS TÁCTICO -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
