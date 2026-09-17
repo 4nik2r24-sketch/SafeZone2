@@ -11,7 +11,6 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
-        <!-- Botón para Volver -->
         <TextView
             android:id="@+id/btnVolverReporte"
             android:layout_width="wrap_content"
@@ -26,18 +25,27 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Reporte Rápido"
+            android:text="Reportar Incidente"
             android:textColor="#EF4444"
             android:textSize="24sp"
             android:textStyle="bold"
+            android:layout_marginBottom="8dp"/>
+
+        <TextView
+            android:id="@+id/tvUbicacionMarcada"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📍 Punto seleccionado en el mapa"
+            android:textColor="#94A3B8"
+            android:textSize="13sp"
             android:layout_marginBottom="24dp"/>
 
-        <!-- Menú Desplegable: Tipo de Crimen -->
+        <!-- Menú: Tipo de Delito -->
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="¿Qué está sucediendo?"
+            android:hint="Tipo de delito"
             app:hintTextColor="#94A3B8"
             android:textColorHint="#94A3B8"
             app:boxBackgroundColor="#171B26"
@@ -52,12 +60,12 @@
                 android:textColor="#FFFFFF" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Menú Desplegable: Horario -->
+        <!-- Menú: Horario en Formato 24 Horas -->
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="¿Cuándo ocurrió?"
+            android:hint="Horario del suceso (24 hrs)"
             app:hintTextColor="#94A3B8"
             android:textColorHint="#94A3B8"
             app:boxBackgroundColor="#171B26"
@@ -72,12 +80,12 @@
                 android:textColor="#FFFFFF" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Campo Rápido: Descripción -->
+        <!-- Campo: Descripción -->
         <com.google.android.material.textfield.TextInputLayout
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Detalles o descripción (Opcional)"
+            android:hint="Descripción o características (Opcional)"
             app:hintTextColor="#94A3B8"
             android:textColorHint="#94A3B8"
             app:boxBackgroundColor="#171B26"
@@ -93,37 +101,24 @@
                 android:textColor="#FFFFFF" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- Botón para obtener ubicación GPS al instante -->
-        <Button
-            android:id="@+id/btnUsarMiUbicacion"
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:backgroundTint="#202636"
-            android:text="📍 Usar mi ubicación actual"
-            android:textColor="#38BDF8"
-            android:textAllCaps="false"
-            android:layout_marginBottom="16dp"/>
-
-        <!-- Botón de Envío de Emergencia -->
+        <!-- Botón de Envío Directo -->
         <Button
             android:id="@+id/btnEnviarReporte"
             android:layout_width="match_parent"
             android:layout_height="60dp"
             android:backgroundTint="#EF4444"
-            android:text="ENVIAR REPORTE AHORA"
+            android:text="REGISTRAR REPORTE"
             android:textColor="#FFFFFF"
             android:textStyle="bold"
             android:textSize="16sp"/>
 
-        <!-- Botón para ver el historial de reportes -->
         <Button
             android:id="@+id/btnVerHistorial"
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="16dp"
-            android:layout_marginBottom="16dp"
             android:backgroundTint="#202636"
-            android:text="Ver historial de reportes de esta zona"
+            android:text="Ver historial de reportes"
             android:textAllCaps="false"
             android:textColor="#94A3B8"
             android:textStyle="bold"

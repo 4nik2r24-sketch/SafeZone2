@@ -7,12 +7,11 @@
     android:layout_height="match_parent"
     android:background="#0A0E18">
 
-    <!-- CAJA PRINCIPAL: Controla los límites del mapa -->
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Capa Superior: Encabezado -->
+        <!-- Capa Superior: Título, Estado y Perfil -->
         <LinearLayout
             android:id="@+id/capaSuperior"
             android:layout_width="match_parent"
@@ -70,8 +69,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 app:cardBackgroundColor="#171B26"
-                app:cardCornerRadius="24dp"
-                android:layout_marginBottom="12dp">
+                app:cardCornerRadius="24dp">
                 <EditText
                     android:id="@+id/txtBuscar"
                     android:layout_width="match_parent"
@@ -84,55 +82,9 @@
                     android:paddingEnd="20dp"
                     android:textSize="14sp" />
             </com.google.android.material.card.MaterialCardView>
-
-            <!-- NUEVO: Botones de Modo de Mapa -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:weightSum="3">
-
-                <Button
-                    android:id="@+id/btnModoNormal"
-                    android:layout_width="0dp"
-                    android:layout_height="40dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="4dp"
-                    android:text="Mover"
-                    android:textSize="12sp"
-                    android:textColor="#000000"
-                    android:backgroundTint="#38BDF8"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"/>
-
-                <Button
-                    android:id="@+id/btnModoDibujo"
-                    android:layout_width="0dp"
-                    android:layout_height="40dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="4dp"
-                    android:text="Dibujar"
-                    android:textSize="12sp"
-                    android:textColor="#FFFFFF"
-                    android:backgroundTint="#2D3748"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"/>
-
-                <Button
-                    android:id="@+id/btnModoBorrar"
-                    android:layout_width="0dp"
-                    android:layout_height="40dp"
-                    android:layout_weight="1"
-                    android:text="Borrar"
-                    android:textSize="12sp"
-                    android:textColor="#FFFFFF"
-                    android:backgroundTint="#2D3748"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"/>
-            </LinearLayout>
         </LinearLayout>
 
-        <!-- Barra de Navegación Inferior -->
+        <!-- Barra Inferior -->
         <com.google.android.material.bottomnavigation.BottomNavigationView
             android:id="@+id/bottomNavigation"
             android:layout_width="match_parent"
@@ -141,7 +93,7 @@
             android:background="#0A0E18"
             android:elevation="15dp" />
 
-        <!-- EL MAPA DE OPENSTREETMAP -->
+        <!-- Mapa -->
         <org.osmdroid.views.MapView
             android:id="@+id/map"
             android:layout_width="match_parent"
@@ -150,33 +102,20 @@
             android:layout_above="@+id/bottomNavigation" />
     </RelativeLayout>
 
-    <!-- BOTÓN SOS TÁCTICO -->
+    <!-- Único Botón Flotante: SOS Táctico -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/btnFlotanteSOS"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="20dp"
-        android:layout_marginBottom="160dp"
+        android:layout_marginBottom="90dp"
         android:backgroundTint="#FCA5A5"
         android:src="@android:drawable/ic_dialog_alert"
         app:tint="#7F1D1D"
         android:elevation="16dp" />
 
-    <!-- BOTÓN DE REPORTE -->
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/btnFlotanteReportar"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_marginEnd="20dp"
-        android:layout_marginBottom="80dp"
-        android:backgroundTint="#EF4444"
-        android:src="@android:drawable/ic_input_add"
-        app:tint="#FFFFFF"
-        android:elevation="16dp" />
-
-    <!-- PANEL DESLIZABLE (Con pestaña visible permanente) -->
+    <!-- Panel Deslizable de Incidentes -->
     <LinearLayout
         android:id="@+id/bottomSheet"
         android:layout_width="match_parent"
@@ -198,7 +137,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Desliza para ver detalles de la zona"
+            android:text="Mantén presionado el mapa para reportar"
             android:textColor="#38BDF8"
             android:textAlignment="center"
             android:textStyle="bold"
@@ -208,7 +147,7 @@
             android:id="@+id/tvTituloSector"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Sector 4B: Cruce Calle 10 con Av. Central"
+            android:text="Sin selección activa"
             android:textColor="#FFFFFF"
             android:textSize="18sp"
             android:textStyle="bold"/>
@@ -218,7 +157,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Horario crítico: 22:00 a 04:30 hrs"
+            android:text="Horario: --:--"
             android:textColor="#FFFFFF"
             android:textSize="14sp"/>
 
@@ -227,7 +166,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Robo a mano armada y motocicleta"
+            android:text="Toca un pin para ver el detalle"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold"/>
@@ -237,7 +176,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Dos sujetos masculinos en motocicleta negra sin placas, ropa oscura, interceptan peatones."
+            android:text="Los detalles del incidente seleccionado se mostrarán aquí."
             android:textColor="#94A3B8"
             android:textSize="12sp"/>
 

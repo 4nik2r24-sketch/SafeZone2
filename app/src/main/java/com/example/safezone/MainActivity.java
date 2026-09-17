@@ -1,11 +1,12 @@
 package com.example.safezone;
 
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 
@@ -13,26 +14,38 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import org.osmdroid.config.Configuration;
+import org.osmdroid.events.MapEventsReceiver;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.MapEventsOverlay;
+import org.osmdroid.views.overlay.Marker;
+import org.osmdroid.views.overlay.Polygon;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static class ZonaRiesgo {
+        GeoPoint centro;
+        int totalReportes;
+        Polygon perimetroVisual;
+
+        ZonaRiesgo(GeoPoint centro, Polygon perimetroVisual) {
+            this.centro = centro;
+            this.totalReportes = 1;
+            this.perimetroVisual = perimetroVisual;
+        }
+    }
+
     private BottomSheetBehavior<View> bottomSheetBehavior;
     private TextView tvTituloSector, tvHorario, tvTipoCrimen, tvDescripcion;
-    private FloatingActionButton btnFlotanteReportar, btnFlotanteSOS;
+    private FloatingActionButton btnFlotanteSOS;
     private CardView btnPerfilContacto;
     private MapView mapa;
 
-    // Botones de Modo
-    private Button btnModoNormal, btnModoDibujo, btnModoBorrar;
-
-    // Variables para el modo interactivo
-    private java.util.List<GeoPoint> puntosTemporales = new java.util.ArrayList<>();
-    private java.util.List<org.osmdroid.views.overlay.Polygon> zonasDibujadas = new java.util.ArrayList<>();
-
-    // 0 = Mover, 1 = Dibujar, 2 = Borrar
-    private int modoActual = 1;
+    private final List<Incidente> listaIncidentes = new ArrayList<>();
+    private final List<ZonaRiesgo> listaZonas = new ArrayList<>();
 
     private final androidx.activity.result.ActivityResultLauncher<Intent> reporteLauncher =
             registerForActivityResult(new androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
@@ -40,87 +53,14 @@ public class MainActivity extends AppCompatActivity {
                         if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                             Intent data = result.getData();
                             String tipo = data.getStringExtra("TIPO_CRIMEN");
+                            String horario = data.getStringExtra("HORARIO");
                             String desc = data.getStringExtra("DESCRIPCION");
                             double lat = data.getDoubleExtra("LAT", -20.2155);
                             double lon = data.getDoubleExtra("LON", -70.1513);
 
-                            agregarMarcador(lat, lon, tipo, desc);
+                            procesarNuevoReporte(lat, lon, tipo, horario, desc);
                         }
                     });
-
-    private void dibujarZonaPoligonal(java.util.List<GeoPoint> puntos, int colorBorde, int colorRelleno) {
-        org.osmdroid.views.overlay.Polygon zona = new org.osmdroid.views.overlay.Polygon();
-        zona.getFillPaint().setColor(colorRelleno);
-        zona.getOutlinePaint().setColor(colorBorde);
-        zona.getOutlinePaint().setStrokeWidth(3.0f);
-
-        zona.setPoints(puntos);
-        mapa.getOverlays().add(zona);
-        zonasDibujadas.add(zona);
-        mapa.invalidate();
-    }
-
-    // LÓGICA DE BORRADO: Elimina zonas que toquen el recuadro que acabas de hacer
-    private void borrarZonasEnArea(java.util.List<GeoPoint> puntosArea) {
-        // 1. Calcular los límites geográficos de tus 4 puntos
-        double minLat = puntosArea.get(0).getLatitude();
-        double maxLat = puntosArea.get(0).getLatitude();
-        double minLon = puntosArea.get(0).getLongitude();
-        double maxLon = puntosArea.get(0).getLongitude();
-
-        for (GeoPoint p : puntosArea) {
-            if (p.getLatitude() < minLat) minLat = p.getLatitude();
-            if (p.getLatitude() > maxLat) maxLat = p.getLatitude();
-            if (p.getLongitude() < minLon) minLon = p.getLongitude();
-            if (p.getLongitude() > maxLon) maxLon = p.getLongitude();
-        }
-
-        // 2. Buscar qué polígonos están dentro de ese recuadro
-        java.util.List<org.osmdroid.views.overlay.Polygon> zonasAEliminar = new java.util.ArrayList<>();
-        for (org.osmdroid.views.overlay.Polygon zona : zonasDibujadas) {
-            boolean tocaArea = false;
-            for (GeoPoint pZona : zona.getPoints()) {
-                if (pZona.getLatitude() >= minLat && pZona.getLatitude() <= maxLat &&
-                        pZona.getLongitude() >= minLon && pZona.getLongitude() <= maxLon) {
-                    tocaArea = true;
-                    break;
-                }
-            }
-            if (tocaArea) zonasAEliminar.add(zona);
-        }
-
-        // 3. Eliminarlos del mapa
-        for (org.osmdroid.views.overlay.Polygon zonaMala : zonasAEliminar) {
-            mapa.getOverlays().remove(zonaMala);
-            zonasDibujadas.remove(zonaMala);
-        }
-
-        mapa.invalidate();
-        Toast.makeText(this, "Se borraron " + zonasAEliminar.size() + " zonas", Toast.LENGTH_SHORT).show();
-    }
-
-    private void agregarMarcador(double lat, double lon, String tipoCrimen, String descripcion) {
-        org.osmdroid.views.overlay.Marker marcador = new org.osmdroid.views.overlay.Marker(mapa);
-        marcador.setPosition(new GeoPoint(lat, lon));
-        marcador.setTitle(tipoCrimen);
-        marcador.setSnippet(descripcion);
-        marcador.setAnchor(org.osmdroid.views.overlay.Marker.ANCHOR_CENTER, org.osmdroid.views.overlay.Marker.ANCHOR_BOTTOM);
-
-        mapa.getOverlays().add(marcador);
-        mapa.invalidate();
-    }
-
-    // Actualiza los colores de los botones para saber cuál está seleccionado
-    private void actualizarBotonesMenu() {
-        btnModoNormal.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor(modoActual == 0 ? "#38BDF8" : "#2D3748")));
-        btnModoNormal.setTextColor(android.graphics.Color.parseColor(modoActual == 0 ? "#000000" : "#FFFFFF"));
-
-        btnModoDibujo.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor(modoActual == 1 ? "#38BDF8" : "#2D3748")));
-        btnModoDibujo.setTextColor(android.graphics.Color.parseColor(modoActual == 1 ? "#000000" : "#FFFFFF"));
-
-        btnModoBorrar.setBackgroundTintList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor(modoActual == 2 ? "#38BDF8" : "#2D3748")));
-        btnModoBorrar.setTextColor(android.graphics.Color.parseColor(modoActual == 2 ? "#000000" : "#FFFFFF"));
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -144,52 +84,123 @@ public class MainActivity extends AppCompatActivity {
         tvHorario = findViewById(R.id.tvHorario);
         tvTipoCrimen = findViewById(R.id.tvTipoCrimen);
         tvDescripcion = findViewById(R.id.tvDescripcion);
-        btnFlotanteReportar = findViewById(R.id.btnFlotanteReportar);
+
         btnFlotanteSOS = findViewById(R.id.btnFlotanteSOS);
         btnPerfilContacto = findViewById(R.id.btnPerfilContacto);
 
-        btnModoNormal = findViewById(R.id.btnModoNormal);
-        btnModoDibujo = findViewById(R.id.btnModoDibujo);
-        btnModoBorrar = findViewById(R.id.btnModoBorrar);
-
-        // Eventos de los botones de modo
-        btnModoNormal.setOnClickListener(v -> { modoActual = 0; puntosTemporales.clear(); actualizarBotonesMenu(); });
-        btnModoDibujo.setOnClickListener(v -> { modoActual = 1; puntosTemporales.clear(); actualizarBotonesMenu(); });
-        btnModoBorrar.setOnClickListener(v -> { modoActual = 2; puntosTemporales.clear(); actualizarBotonesMenu(); });
-
-        btnFlotanteReportar.setOnClickListener(v -> reporteLauncher.launch(new Intent(MainActivity.this, ReportActivity.class)));
         btnPerfilContacto.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, ContactosActivity.class)));
         btnFlotanteSOS.setOnClickListener(v -> Toast.makeText(MainActivity.this, "SOS ACTIVADO", Toast.LENGTH_LONG).show());
 
-        org.osmdroid.events.MapEventsReceiver receptorToques = new org.osmdroid.events.MapEventsReceiver() {
+        MapEventsReceiver receptorEventos = new MapEventsReceiver() {
             @Override
             public boolean singleTapConfirmedHelper(GeoPoint p) {
-                if (modoActual == 1 || modoActual == 2) {
-                    puntosTemporales.add(p);
-                    Toast.makeText(MainActivity.this, "Punto " + puntosTemporales.size() + " (Modo " + (modoActual==1?"Dibujo":"Borrar") + ")", Toast.LENGTH_SHORT).show();
-
-                    if (puntosTemporales.size() == 4) {
-                        if (modoActual == 1) {
-                            // DIBUJAR
-                            dibujarZonaPoligonal(new java.util.ArrayList<>(puntosTemporales),
-                                    android.graphics.Color.RED, android.graphics.Color.argb(75, 255, 0, 0));
-                        } else if (modoActual == 2) {
-                            // BORRAR
-                            borrarZonasEnArea(new java.util.ArrayList<>(puntosTemporales));
-                        }
-                        puntosTemporales.clear();
-                    }
-                    return true;
-                }
-                return false; // Si está en modoNormal (0), te deja mover el mapa tranquilo
+                bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                return false;
             }
 
             @Override
-            public boolean longPressHelper(GeoPoint p) { return false; }
+            public boolean longPressHelper(GeoPoint p) {
+                mostrarDialogoConfirmacion(p);
+                return true;
+            }
         };
 
-        mapa.getOverlays().add(new org.osmdroid.views.overlay.MapEventsOverlay(receptorToques));
+        mapa.getOverlays().add(new MapEventsOverlay(receptorEventos));
         mapa.invalidate();
+    }
+
+    private void mostrarDialogoConfirmacion(GeoPoint p) {
+        new AlertDialog.Builder(this)
+                .setTitle("Nuevo Reporte")
+                .setMessage("¿Deseas reportar un incidente en esta ubicación?")
+                .setPositiveButton("Reportar", (dialog, which) -> {
+                    Intent intent = new Intent(MainActivity.this, ReportActivity.class);
+                    intent.putExtra("LAT_MAPA", p.getLatitude());
+                    intent.putExtra("LON_MAPA", p.getLongitude());
+                    reporteLauncher.launch(intent);
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void procesarNuevoReporte(double lat, double lon, String tipo, String horario, String desc) {
+        GeoPoint nuevoPunto = new GeoPoint(lat, lon);
+
+        Incidente nuevoIncidente = new Incidente(String.valueOf(System.currentTimeMillis()), lat, lon, tipo, desc, horario);
+        listaIncidentes.add(nuevoIncidente);
+        agregarMarcador(nuevoPunto, tipo, horario, desc);
+
+        ZonaRiesgo zonaCercana = null;
+        for (ZonaRiesgo z : listaZonas) {
+            if (z.centro.distanceToAsDouble(nuevoPunto) <= 150.0) {
+                zonaCercana = z;
+                break;
+            }
+        }
+
+        if (zonaCercana != null) {
+            zonaCercana.totalReportes++;
+            actualizarZonaVisual(zonaCercana);
+            Toast.makeText(this, "Zona de riesgo agravada (" + zonaCercana.totalReportes + " reportes)", Toast.LENGTH_SHORT).show();
+        } else {
+            crearNuevaZonaVisual(nuevoPunto);
+            Toast.makeText(this, "Incidente registrado", Toast.LENGTH_SHORT).show();
+        }
+
+        mapa.invalidate();
+    }
+
+    private void crearNuevaZonaVisual(GeoPoint punto) {
+        Polygon perimetro = new Polygon();
+        perimetro.setPoints(Polygon.pointsAsCircle(punto, 60.0));
+
+        perimetro.getOutlinePaint().setColor(Color.parseColor("#10B981"));
+        perimetro.getOutlinePaint().setStrokeWidth(3.0f);
+        perimetro.getFillPaint().setColor(Color.argb(60, 16, 185, 129));
+
+        mapa.getOverlays().add(0, perimetro);
+        listaZonas.add(new ZonaRiesgo(punto, perimetro));
+    }
+
+    private void actualizarZonaVisual(ZonaRiesgo zona) {
+        double radio = 60.0 + ((zona.totalReportes - 1) * 25.0);
+        zona.perimetroVisual.setPoints(Polygon.pointsAsCircle(zona.centro, radio));
+
+        int colorBorde;
+        int colorRelleno;
+
+        if (zona.totalReportes == 2) {
+            colorBorde = Color.parseColor("#FBBF24");
+            colorRelleno = Color.argb(70, 251, 191, 36);
+        } else if (zona.totalReportes <= 4) {
+            colorBorde = Color.parseColor("#F97316");
+            colorRelleno = Color.argb(80, 249, 115, 22);
+        } else {
+            colorBorde = Color.parseColor("#EF4444");
+            colorRelleno = Color.argb(95, 239, 68, 68);
+        }
+
+        zona.perimetroVisual.getOutlinePaint().setColor(colorBorde);
+        zona.perimetroVisual.getFillPaint().setColor(colorRelleno);
+    }
+
+    private void agregarMarcador(GeoPoint punto, String tipoCrimen, String horario, String descripcion) {
+        Marker marcador = new Marker(mapa);
+        marcador.setPosition(punto);
+        marcador.setTitle(tipoCrimen);
+        marcador.setSnippet(descripcion);
+        marcador.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+        marcador.setOnMarkerClickListener((marker, mapView) -> {
+            tvTituloSector.setText("Incidente Reportado");
+            tvTipoCrimen.setText(marker.getTitle());
+            tvDescripcion.setText(marker.getSnippet());
+            tvHorario.setText("Horario crítico: " + horario);
+            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
+            return true;
+        });
+
+        mapa.getOverlays().add(marcador);
     }
 
     @Override
