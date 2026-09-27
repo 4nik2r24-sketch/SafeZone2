@@ -7,11 +7,12 @@
     android:layout_height="match_parent"
     android:background="#0A0E18">
 
+    <!-- CONTENEDOR MAPA Y BARRA SUPERIOR -->
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <!-- Capa Superior: Título, Estado y Perfil -->
+        <!-- Capa Superior: Título, Monitoreo y Buscador -->
         <LinearLayout
             android:id="@+id/capaSuperior"
             android:layout_width="match_parent"
@@ -20,7 +21,8 @@
             android:padding="16dp"
             android:layout_marginTop="30dp"
             android:layout_alignParentTop="true"
-            android:elevation="15dp">
+            android:elevation="15dp"
+            android:translationZ="15dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -44,7 +46,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="● MONITOREO ACTIVO"
+                        android:text="● MONITOREO ACTIVO (GPS BACKGROUND)"
                         android:textColor="#10B981"
                         android:textSize="10sp"
                         android:textStyle="bold" />
@@ -61,7 +63,8 @@
                         android:layout_height="match_parent"
                         android:padding="8dp"
                         android:src="@android:drawable/ic_menu_myplaces"
-                        app:tint="#000000" />
+                        app:tint="#000000"
+                        android:contentDescription="Perfil y contactos" />
                 </androidx.cardview.widget.CardView>
             </LinearLayout>
 
@@ -69,7 +72,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 app:cardBackgroundColor="#171B26"
-                app:cardCornerRadius="24dp">
+                app:cardCornerRadius="24dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="#2D3748">
                 <EditText
                     android:id="@+id/txtBuscar"
                     android:layout_width="match_parent"
@@ -80,7 +85,8 @@
                     android:textColor="#FFFFFF"
                     android:paddingStart="20dp"
                     android:paddingEnd="20dp"
-                    android:textSize="14sp" />
+                    android:textSize="14sp"
+                    android:inputType="text" />
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
 
@@ -91,18 +97,20 @@
             android:layout_height="56dp"
             android:layout_alignParentBottom="true"
             android:background="#0A0E18"
-            android:elevation="15dp" />
+            android:elevation="15dp"
+            android:translationZ="15dp" />
 
-        <!-- Mapa -->
+        <!-- Vista del Mapa Osmdroid -->
         <org.osmdroid.views.MapView
             android:id="@+id/map"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_below="@+id/capaSuperior"
             android:layout_above="@+id/bottomNavigation" />
+
     </RelativeLayout>
 
-    <!-- Único Botón Flotante: SOS Táctico -->
+    <!-- Botón Flotante SOS -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/btnFlotanteSOS"
         android:layout_width="wrap_content"
@@ -111,11 +119,15 @@
         android:layout_marginEnd="20dp"
         android:layout_marginBottom="90dp"
         android:backgroundTint="#FCA5A5"
+        android:contentDescription="Botón SOS de emergencia"
+        android:elevation="16dp"
         android:src="@android:drawable/ic_dialog_alert"
-        app:tint="#7F1D1D"
-        android:elevation="16dp" />
+        app:borderWidth="2dp"
+        app:fabSize="normal"
+        app:rippleColor="#EF4444"
+        app:tint="#7F1D1D" />
 
-    <!-- Panel Deslizable de Incidentes -->
+    <!-- Bottom Sheet (Panel Deslizable) -->
     <LinearLayout
         android:id="@+id/bottomSheet"
         android:layout_width="match_parent"
@@ -137,7 +149,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Mantén presionado el mapa para reportar"
+            android:text="Mantén presionado para reportar desde tu ubicación"
             android:textColor="#38BDF8"
             android:textAlignment="center"
             android:textStyle="bold"
@@ -180,6 +192,7 @@
             android:textColor="#94A3B8"
             android:textSize="12sp"/>
 
+        <!-- BOTÓN RUTA SEGURA CON ID DECLARADO -->
         <Button
             android:id="@+id/btnRutaSegura"
             android:layout_width="match_parent"
@@ -189,5 +202,7 @@
             android:text="Solicitar Ruta Segura Alternativa"
             android:textColor="#000000"
             android:textStyle="bold"/>
+
     </LinearLayout>
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
