@@ -17,11 +17,10 @@ public class Incidente {
         this.horario = horario;
     }
 
-        public String getIdDelito() { return idDelito; }
-        public double getLatitud() { return latitud; }
-        public double getLongitud() { return longitud; }
-        public String getTipoCrimen() { return tipoCrimen; }
-        public String getDescripcionDelincuente() { return descripcionDelincuente; }
-        public String getHorario() { return horario; }
+    public String getIdDelito() { return idDelito; }
+    public double getLatitud() { return latitud; }
+    public double getLongitud() { return longitud; }
+    public String getTipoCrimen() { return tipoCrimen; }
+    public String getDescripcionDelincuente() { return descripcionDelincuente; }
+    public String getHorario() { return horario; }
 }
-

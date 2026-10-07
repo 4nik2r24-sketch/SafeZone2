@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#0A0E18"
     android:orientation="vertical"
     android:padding="20dp">
 
-    <!-- Botón para Volver -->
+    <!-- Botón Volver -->
     <TextView
         android:id="@+id/btnVolverContactos"
         android:layout_width="wrap_content"
@@ -26,17 +25,39 @@
         android:textColor="#FFFFFF"
         android:textSize="22sp"
         android:textStyle="bold"
+        android:layout_marginBottom="4dp"/>
+
+    <TextView
+        android:id="@+id/tvLimiteContactos"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Máximo 3 contactos autorizados (0/3)."
+        android:textColor="#38BDF8"
+        android:textSize="13sp"
+        android:textStyle="bold"
         android:layout_marginBottom="8dp"/>
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Se notificará a estas personas si entras a una zona de riesgo."
+        android:text="El Contacto 1 recibirá la llamada y el Contacto 2 un SMS al pulsar SOS."
         android:textColor="#94A3B8"
-        android:textSize="14sp"
-        android:layout_marginBottom="24dp"/>
+        android:textSize="13sp"
+        android:layout_marginBottom="16dp"/>
 
-    <!-- Formulario para agregar contacto -->
+    <!-- BOTÓN PARA ABRIR LA AGENDA NATIVA DEL CELULAR -->
+    <Button
+        android:id="@+id/btnSeleccionarDeAgenda"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:backgroundTint="#1E293B"
+        android:text="📖 Seleccionar de mis Contactos"
+        android:textColor="#38BDF8"
+        android:textStyle="bold"
+        android:textAllCaps="false"
+        android:layout_marginBottom="12dp"/>
+
+    <!-- Formulario para autocompletar o escribir a mano -->
     <EditText
         android:id="@+id/etNombreContacto"
         android:layout_width="match_parent"
@@ -63,20 +84,42 @@
     <Button
         android:id="@+id/btnGuardarContacto"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
+        android:layout_height="54dp"
         android:backgroundTint="#38BDF8"
-        android:text="Agregar Contacto"
+        android:text="Guardar en Red de Confianza"
         android:textColor="#000000"
         android:textStyle="bold"
-        android:layout_marginBottom="24dp"/>
+        android:layout_marginBottom="20dp"/>
 
-    <!-- Aquí iría una lista (RecyclerView) con los contactos guardados, por ahora un placeholder -->
     <TextView
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="No tienes contactos agregados aún."
-        android:textColor="#475569"
-        android:textAlignment="center"
-        android:layout_marginTop="30dp"/>
+        android:text="RED DE CONFIANZA ACTIVA"
+        android:textColor="#64748B"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="10dp"/>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:id="@+id/contenedorListaContactos"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvSinContactos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="No tienes contactos agregados aún."
+                android:textColor="#475569"
+                android:textAlignment="center"
+                android:layout_marginTop="20dp"/>
+        </LinearLayout>
+    </ScrollView>
 
 </LinearLayout>
