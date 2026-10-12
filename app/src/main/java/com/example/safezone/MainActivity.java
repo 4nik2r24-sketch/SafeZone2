@@ -16,7 +16,6 @@ import android.os.Looper;
 import android.telephony.SmsManager;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
@@ -45,30 +44,21 @@ import org.osmdroid.views.overlay.MapEventsOverlay;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.Polygon;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "SafeZoneMain";
 
     private static final XYTileSource FUENTE_LIBRE = new XYTileSource(
-            "OSMFrance",
-            0, 19, 256, ".png",
+            "OSMFrance", 0, 19, 256, ".png",
             new String[]{
                     "https://a.tile.openstreetmap.fr/osmfr/",
                     "https://b.tile.openstreetmap.fr/osmfr/",
                     "https://c.tile.openstreetmap.fr/osmfr/"
-            }
-    );
+            });
 
     private static class ZonaRiesgo {
         GeoPoint centro;
@@ -94,10 +84,6 @@ public class MainActivity extends AppCompatActivity {
     private DireccionAdapter direccionAdapter;
     private Marker marcadorLugarBuscado;
 
-    private final ExecutorService ejecutorRed = Executors.newSingleThreadExecutor();
-    private final Handler handlerDebounce = new Handler(Looper.getMainLooper());
-    private Runnable tareaBusqueda;
-
     private final List<Incidente> listaIncidentes = new ArrayList<>();
     private final List<ZonaRiesgo> listaZonas = new ArrayList<>();
 
@@ -106,12 +92,13 @@ public class MainActivity extends AppCompatActivity {
                     result -> {
                         if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                             Intent data = result.getData();
-                            String tipo = data.getStringExtra("TIPO_CRIMEN");
-                            String horario = data.getStringExtra("HORARIO");
-                            String desc = data.getStringExtra("DESCRIPCION");
-                            double lat = data.getDoubleExtra("LAT", -20.2155);
-                            double lon = data.getDoubleExtra("LON", -70.1513);
-                            procesarNuevoReporte(lat, lon, tipo, horario, desc);
+                            procesarNuevoReporte(
+                                    data.getDoubleExtra("LAT", -20.2155),
+                                    data.getDoubleExtra("LON", -70.1513),
+                                    data.getStringExtra("TIPO_CRIMEN"),
+                                    data.getStringExtra("HORARIO"),
+                                    data.getStringExtra("DESCRIPCION")
+                            );
                         }
                     });
 
@@ -119,10 +106,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        File cacheOsm = new File(getCacheDir(), "osmdroid");
-        borrarDirectorio(cacheOsm);
-
-        Configuration.getInstance().setUserAgentValue("SafeZone_Iquique_V4/1.0 (contacto@safezone.cl)");
+        Configuration.getInstance().setUserAgentValue("SafeZone_Iquique_V4/1.0");
         Configuration.getInstance().load(this, getSharedPreferences("osmdroid_prefs", MODE_PRIVATE));
         Configuration.getInstance().setTileFileSystemCacheMaxBytes(150L * 1024 * 1024);
 
@@ -152,15 +136,17 @@ public class MainActivity extends AppCompatActivity {
         btnLimpiarBuscador = findViewById(R.id.btnLimpiarBuscador);
         View cardBuscador = findViewById(R.id.capaSuperior);
 
-        txtBuscar.setThreshold(1);
+        txtBuscar.setThreshold(3);
         txtBuscar.setDropDownWidth(ViewGroup.LayoutParams.MATCH_PARENT);
         if (cardBuscador != null) {
             txtBuscar.setDropDownAnchor(cardBuscador.getId());
         }
 
+        // BÚSQUEDA NATIVA: El adaptador se encarga de todo el trabajo pesado en segundo plano
         direccionAdapter = new DireccionAdapter(this);
         txtBuscar.setAdapter(direccionAdapter);
 
+        // Controlamos únicamente la visibilidad del botón "X" para limpiar
         txtBuscar.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -170,20 +156,7 @@ public class MainActivity extends AppCompatActivity {
                 if (btnLimpiarBuscador != null) {
                     btnLimpiarBuscador.setVisibility((s != null && s.length() > 0) ? View.VISIBLE : View.GONE);
                 }
-
-                if (tareaBusqueda != null) {
-                    handlerDebounce.removeCallbacks(tareaBusqueda);
-                }
-
-                if (s != null && s.toString().trim().length() >= 2) {
-                    String query = s.toString().trim();
-                    tareaBusqueda = () -> ejecutarBusquedaEnSegundoPlano(query);
-                    handlerDebounce.postDelayed(tareaBusqueda, 350);
-                } else {
-                    direccionAdapter.actualizarDatos(new ArrayList<>());
-                }
             }
-
             @Override
             public void afterTextChanged(Editable s) {}
         });
@@ -201,9 +174,8 @@ public class MainActivity extends AppCompatActivity {
         txtBuscar.setOnItemClickListener((parent, view, position, id) -> {
             ResultadoDireccion dir = direccionAdapter.getItem(position);
             if (dir != null) {
-                txtBuscar.setText("");
+                txtBuscar.setText(dir.getNombre(), false);
                 txtBuscar.clearFocus();
-                direccionAdapter.actualizarDatos(new ArrayList<>());
 
                 InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
                 if (imm != null) imm.hideSoftInputFromWindow(txtBuscar.getWindowToken(), 0);
@@ -212,18 +184,16 @@ public class MainActivity extends AppCompatActivity {
                 mapa.getController().animateTo(destino);
                 mapa.getController().setZoom(17.5);
 
-                if (marcadorLugarBuscado != null) {
-                    mapa.getOverlays().remove(marcadorLugarBuscado);
-                }
+                if (marcadorLugarBuscado != null) mapa.getOverlays().remove(marcadorLugarBuscado);
+
                 marcadorLugarBuscado = new Marker(mapa);
                 marcadorLugarBuscado.setPosition(destino);
                 marcadorLugarBuscado.setTitle("Destino Consultado");
                 marcadorLugarBuscado.setSnippet(dir.getNombre());
                 marcadorLugarBuscado.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 
-                if (marcadorLugarBuscado.getIcon() != null) {
-                    marcadorLugarBuscado.getIcon().mutate().setColorFilter(Color.parseColor("#38BDF8"), PorterDuff.Mode.SRC_IN);
-                }
+                // SOLUCIÓN DEFINITIVA DE DISEÑO: Asignamos el ícono vectorial celeste a la búsqueda
+                marcadorLugarBuscado.setIcon(androidx.core.content.ContextCompat.getDrawable(MainActivity.this, R.drawable.ic_pin_busqueda));
 
                 mapa.getOverlays().add(marcadorLugarBuscado);
                 mapa.invalidate();
@@ -232,9 +202,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         if (btnPerfilContacto != null) btnPerfilContacto.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, ContactosActivity.class)));
-
         if (btnFlotanteSOS != null) btnFlotanteSOS.setOnClickListener(v -> ejecutarProtocoloSOS());
-
         if (btnRutaSegura != null) btnRutaSegura.setOnClickListener(v -> bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED));
 
         MapEventsReceiver receptorEventos = new MapEventsReceiver() {
@@ -243,7 +211,6 @@ public class MainActivity extends AppCompatActivity {
                 bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
                 return false;
             }
-
             @Override
             public boolean longPressHelper(GeoPoint p) {
                 iniciarReporteConUbicacionDispositivo();
@@ -252,71 +219,6 @@ public class MainActivity extends AppCompatActivity {
         };
 
         mapa.getOverlays().add(new MapEventsOverlay(receptorEventos));
-        mapa.invalidate();
-    }
-
-    private void ejecutarBusquedaEnSegundoPlano(String consulta) {
-        ejecutorRed.execute(() -> {
-            List<ResultadoDireccion> listaSugerencias = new ArrayList<>();
-            HttpURLConnection conn = null;
-            BufferedReader reader = null;
-            try {
-                String queryCod = URLEncoder.encode(consulta, "UTF-8");
-                String urlStr = "https://photon.komoot.io/api/?q=" + queryCod
-                        + "&lat=-20.2155&lon=-70.1513&limit=7&lang=es";
-
-                URL url = new URL(urlStr);
-                conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
-                conn.setRequestProperty("User-Agent", "SafeZoneApp/1.0");
-
-                if (conn.getResponseCode() == 200) {
-                    reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                    StringBuilder sb = new StringBuilder();
-                    String linea;
-                    while ((linea = reader.readLine()) != null) sb.append(linea);
-
-                    JSONObject geoJson = new JSONObject(sb.toString());
-                    JSONArray features = geoJson.optJSONArray("features");
-
-                    if (features != null) {
-                        for (int i = 0; i < features.length(); i++) {
-                            JSONObject feat = features.getJSONObject(i);
-                            JSONObject prop = feat.getJSONObject("properties");
-                            JSONArray coord = feat.getJSONObject("geometry").getJSONArray("coordinates");
-
-                            double lon = coord.getDouble(0);
-                            double lat = coord.getDouble(1);
-
-                            String nombre = prop.optString("name", "").trim();
-                            String calle = prop.optString("street", "").trim();
-                            String ciudad = prop.optString("city", prop.optString("locality", "")).trim();
-
-                            String titulo = !calle.isEmpty() ? calle : (!nombre.isEmpty() ? nombre : consulta);
-                            String finalLabel = !ciudad.isEmpty() ? titulo + ", " + ciudad : titulo;
-
-                            listaSugerencias.add(new ResultadoDireccion(finalLabel, lat, lon));
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Error: " + e.getMessage());
-            } finally {
-                try {
-                    if (reader != null) reader.close();
-                    if (conn != null) conn.disconnect();
-                } catch (Exception ignored) {}
-            }
-
-            runOnUiThread(() -> {
-                direccionAdapter.actualizarDatos(listaSugerencias);
-                if (!listaSugerencias.isEmpty() && txtBuscar.hasFocus()) {
-                    txtBuscar.showDropDown();
-                }
-            });
-        });
     }
 
     private void evaluarPanoramaSector(GeoPoint puntoConsultado, String nombreLugar) {
@@ -329,46 +231,14 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        int incidentesCercanos = 0;
-        Incidente ultimoIncidente = null;
-        for (Incidente inc : listaIncidentes) {
-            GeoPoint posIncidente = new GeoPoint(inc.getLatitud(), inc.getLongitud());
-            if (posIncidente.distanceToAsDouble(puntoConsultado) <= 300.0) {
-                incidentesCercanos++;
-                ultimoIncidente = inc;
-            }
-        }
-
         String encabezado = nombreLugar.contains(",") ? nombreLugar.split(",")[0].trim() : nombreLugar;
         tvTituloSector.setText("Ubicación: " + (encabezado.length() > 30 ? encabezado.substring(0, 30) + "..." : encabezado));
 
         if (zonaEncontrada != null) {
             int total = zonaEncontrada.totalReportes;
-            if (total == 1) {
-                tvTipoCrimen.setText("🟢 PRECAUCIÓN: 1 Reporte Registrado");
-                tvHorario.setText("Nivel de Riesgo: Bajo / Alerta Inicial");
-            } else if (total <= 4) {
-                tvTipoCrimen.setText("🟠 PELIGRO: " + total + " Reportes Acumulados");
-                tvHorario.setText("Nivel de Riesgo: Medio / Reincidente");
-            } else {
-                tvTipoCrimen.setText("🔴 ZONA CRÍTICA: " + total + " Delitos Acumulados");
-                tvHorario.setText("Nivel de Riesgo: Extremo");
-            }
-
-            if (ultimoIncidente != null) {
-                tvDescripcion.setText("Último hecho: " + ultimoIncidente.getTipoCrimen() +
-                        " (" + ultimoIncidente.getHorario() + "). " + ultimoIncidente.getDescripcionDelincuente());
-            } else {
-                tvDescripcion.setText("Múltiples incidentes activos en este cuadrante.");
-            }
-
-        } else if (incidentesCercanos > 0) {
-            tvTipoCrimen.setText("⚠️ PRECAUCIÓN: " + incidentesCercanos + " Incidente(s) Cercano(s)");
-            tvHorario.setText("Riesgo leve en los alrededores");
-            if (ultimoIncidente != null) {
-                tvDescripcion.setText("A menos de 300m: " + ultimoIncidente.getTipoCrimen() +
-                        " (" + ultimoIncidente.getHorario() + "). " + ultimoIncidente.getDescripcionDelincuente());
-            }
+            tvTipoCrimen.setText(total <= 4 ? "🟠 PELIGRO: " + total + " Reportes" : "🔴 ZONA CRÍTICA: " + total + " Delitos");
+            tvHorario.setText("Nivel de Riesgo: Elevado");
+            tvDescripcion.setText("Incidentes recientes en este cuadrante.");
         } else {
             tvTipoCrimen.setText("🛡️ SECTOR SEGURO / SIN REPORTES");
             tvHorario.setText("Estado: Despejado");
@@ -377,12 +247,87 @@ public class MainActivity extends AppCompatActivity {
 
         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
     }
+    private void ejecutarProtocoloSOS() {
+        if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
 
+            androidx.core.app.ActivityCompat.requestPermissions(this, new String[]{
+                    android.Manifest.permission.CALL_PHONE,
+                    android.Manifest.permission.SEND_SMS,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION}, 200);
+            return;
+        }
+
+        java.util.List<Contacto> contactos = obtenerContactosEmergencia();
+        if (contactos.isEmpty()) {
+            android.widget.Toast.makeText(this, "Agrega tus contactos primero.", android.widget.Toast.LENGTH_LONG).show();
+            startActivity(new android.content.Intent(MainActivity.this, ContactosActivity.class));
+            return;
+        }
+
+        android.widget.Toast.makeText(this, "Iniciando SOS y rastreando ubicación en vivo...", android.widget.Toast.LENGTH_SHORT).show();
+
+        // 1. Ejecutar la llamada de inmediato al Contacto 1 para no perder tiempo
+        String telefonoLlamada = contactos.get(0).getTelefono();
+        android.content.Intent callIntent = new android.content.Intent(android.content.Intent.ACTION_CALL);
+        callIntent.setData(android.net.Uri.parse("tel:" + telefonoLlamada));
+        startActivity(callIntent);
+
+        // 2. Obligar al GPS a dar una coordenada en tiempo real para el SMS
+        if (contactos.size() >= 2) {
+            android.location.LocationManager lm = (android.location.LocationManager) getSystemService(android.content.Context.LOCATION_SERVICE);
+            if (lm != null) {
+                // Intenta primero con la máxima precisión satelital (GPS_PROVIDER)
+                lm.requestSingleUpdate(android.location.LocationManager.GPS_PROVIDER, new android.location.LocationListener() {
+                    @Override
+                    public void onLocationChanged(android.location.Location location) {
+                        enviarSMSEmergencia(contactos.get(1), location);
+                    }
+                    @Override public void onStatusChanged(String provider, int status, android.os.Bundle extras) {}
+                    @Override public void onProviderEnabled(String provider) {}
+                    @Override public void onProviderDisabled(String provider) {
+                        // Si falla o el usuario está en interiores, cambia a la antena de celular (NETWORK_PROVIDER)
+                        lm.requestSingleUpdate(android.location.LocationManager.NETWORK_PROVIDER, new android.location.LocationListener() {
+                            @Override
+                            public void onLocationChanged(android.location.Location location) {
+                                enviarSMSEmergencia(contactos.get(1), location);
+                            }
+                            @Override public void onStatusChanged(String provider, int status, android.os.Bundle extras) {}
+                            @Override public void onProviderEnabled(String provider) {}
+                            @Override public void onProviderDisabled(String provider) {
+                                // Último recurso: usar la caché si ambos sensores fallan
+                                enviarSMSEmergencia(contactos.get(1), lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER));
+                            }
+                        }, null);
+                    }
+                }, null);
+            }
+        }
+    }
+
+    private void enviarSMSEmergencia(Contacto contactoSecundario, android.location.Location ubicacionReal) {
+        String mensajeSMS = "¡ALERTA SOS! Me encuentro en peligro.";
+
+        if (ubicacionReal != null) {
+            mensajeSMS += " Mi ubicación exacta EN VIVO: https://maps.google.com/?q=" + ubicacionReal.getLatitude() + "," + ubicacionReal.getLongitude();
+        } else {
+            mensajeSMS += " (Sin señal satelital disponible).";
+        }
+
+        try {
+            android.telephony.SmsManager smsManager = android.telephony.SmsManager.getDefault();
+            // sendMultipartTextMessage asegura que el enlace largo de Google Maps no se corte
+            java.util.ArrayList<String> partes = smsManager.divideMessage(mensajeSMS);
+            smsManager.sendMultipartTextMessage(contactoSecundario.getTelefono(), null, partes, null, null);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
     private List<Contacto> obtenerContactosEmergencia() {
         List<Contacto> lista = new ArrayList<>();
         SharedPreferences prefs = getSharedPreferences("SafeZoneContactosPrefs", MODE_PRIVATE);
         String data = prefs.getString("lista_contactos_json", null);
-
         if (data != null) {
             try {
                 JSONArray jsonArray = new JSONArray(data);
@@ -390,67 +335,9 @@ public class MainActivity extends AppCompatActivity {
                     JSONObject obj = jsonArray.getJSONObject(i);
                     lista.add(new Contacto(obj.getString("id"), obj.getString("nombre"), obj.getString("telefono")));
                 }
-            } catch (JSONException e) {
-                e.printStackTrace();
-            }
+            } catch (JSONException ignored) {}
         }
         return lista;
-    }
-
-    private void ejecutarProtocoloSOS() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED ||
-                ActivityCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS}, 200);
-            return;
-        }
-
-        List<Contacto> contactos = obtenerContactosEmergencia();
-        if (contactos.isEmpty()) {
-            Toast.makeText(this, "Agrega tus contactos primero.", Toast.LENGTH_LONG).show();
-            startActivity(new Intent(MainActivity.this, ContactosActivity.class));
-            return;
-        }
-
-        String mensajeSMS = "¡ALERTA SOS! Me encuentro en peligro.";
-        LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
-        if (lm != null && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            Location loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            if (loc == null) loc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-            if (loc != null) mensajeSMS += " Mi ubicación exacta: https://maps.google.com/?q=" + loc.getLatitude() + "," + loc.getLongitude();
-        }
-
-        // LÓGICA ADAPTATIVA: Si hay 2 o más contactos, el SMS va al segundo. Si solo hay 1, va a ese único contacto.
-        int indiceSMS = (contactos.size() >= 2) ? 1 : 0;
-        String telefonoSMS = contactos.get(indiceSMS).getTelefono();
-
-        try {
-            SmsManager smsManager = SmsManager.getDefault();
-            ArrayList<String> partesMensaje = smsManager.divideMessage(mensajeSMS);
-            smsManager.sendMultipartTextMessage(telefonoSMS, null, partesMensaje, null, null);
-            Toast.makeText(this, "SMS despachado a " + contactos.get(indiceSMS).getNombre(), Toast.LENGTH_SHORT).show();
-        } catch (Exception e) {
-            Toast.makeText(this, "Error SMS: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-
-        // LLAMADA: Siempre va al Contacto 1, ejecutándose 1.5 segundos después del SMS para evitar colisión de antena
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            try {
-                String telefonoLlamada = contactos.get(0).getTelefono();
-                Intent callIntent = new Intent(Intent.ACTION_CALL);
-                callIntent.setData(Uri.parse("tel:" + telefonoLlamada));
-                startActivity(callIntent);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }, 1500);
-    }
-
-    private void borrarDirectorio(File dir) {
-        if (dir != null && dir.isDirectory()) {
-            String[] hijos = dir.list();
-            if (hijos != null) for (String hijo : hijos) borrarDirectorio(new File(dir, hijo));
-            dir.delete();
-        }
     }
 
     private void solicitarPermisos() {
@@ -515,29 +402,23 @@ public class MainActivity extends AppCompatActivity {
             zonaCercana.totalReportes++;
             actualizarZonaVisual(zonaCercana);
         } else {
-            crearNuevaZonaVisual(nuevoPunto);
+            Polygon perimetro = new Polygon();
+            perimetro.setPoints(Polygon.pointsAsCircle(nuevoPunto, 60.0));
+            perimetro.getOutlinePaint().setColor(Color.parseColor("#10B981"));
+            perimetro.getOutlinePaint().setStrokeWidth(3.0f);
+            perimetro.getFillPaint().setColor(Color.argb(60, 16, 185, 129));
+            mapa.getOverlays().add(0, perimetro);
+            listaZonas.add(new ZonaRiesgo(nuevoPunto, perimetro));
         }
         mapa.getController().animateTo(nuevoPunto);
         mapa.invalidate();
     }
 
-    private void crearNuevaZonaVisual(GeoPoint punto) {
-        Polygon perimetro = new Polygon();
-        perimetro.setPoints(Polygon.pointsAsCircle(punto, 60.0));
-        perimetro.getOutlinePaint().setColor(Color.parseColor("#10B981"));
-        perimetro.getOutlinePaint().setStrokeWidth(3.0f);
-        perimetro.getFillPaint().setColor(Color.argb(60, 16, 185, 129));
-        mapa.getOverlays().add(0, perimetro);
-        listaZonas.add(new ZonaRiesgo(punto, perimetro));
-    }
-
     private void actualizarZonaVisual(ZonaRiesgo zona) {
         double radio = 60.0 + ((zona.totalReportes - 1) * 25.0);
         zona.perimetroVisual.setPoints(Polygon.pointsAsCircle(zona.centro, radio));
-
         int colorBorde = (zona.totalReportes == 2) ? Color.parseColor("#FBBF24") : (zona.totalReportes <= 4 ? Color.parseColor("#F97316") : Color.parseColor("#EF4444"));
         int colorRelleno = (zona.totalReportes == 2) ? Color.argb(70, 251, 191, 36) : (zona.totalReportes <= 4 ? Color.argb(80, 249, 115, 22) : Color.argb(95, 239, 68, 68));
-
         zona.perimetroVisual.getOutlinePaint().setColor(colorBorde);
         zona.perimetroVisual.getFillPaint().setColor(colorRelleno);
     }
@@ -548,6 +429,12 @@ public class MainActivity extends AppCompatActivity {
         marcador.setTitle(tipoCrimen);
         marcador.setSnippet(descripcion);
         marcador.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+        // SOLUCIÓN BUG: Forzamos el color ROJO explícitamente para que no herede la forma ni tinte del buscador
+        if (marcador.getIcon() != null) {
+            marcador.getIcon().mutate().clearColorFilter();
+            marcador.getIcon().mutate().setColorFilter(Color.parseColor("#EF4444"), PorterDuff.Mode.SRC_IN);
+        }
 
         marcador.setOnMarkerClickListener((marker, mapView) -> {
             tvTituloSector.setText("Incidente Reportado");
@@ -563,7 +450,14 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onResume() { super.onResume(); if (mapa != null) mapa.onResume(); }
-
     @Override
     protected void onPause() { super.onPause(); if (mapa != null) mapa.onPause(); }
+
+    private void borrarDirectorio(File dir) {
+        if (dir != null && dir.isDirectory()) {
+            String[] hijos = dir.list();
+            if (hijos != null) for (String hijo : hijos) borrarDirectorio(new File(dir, hijo));
+            dir.delete();
+        }
+    }
 }

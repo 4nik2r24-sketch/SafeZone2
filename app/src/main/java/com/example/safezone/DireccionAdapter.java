@@ -12,6 +12,8 @@ import android.widget.Filterable;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -27,7 +29,6 @@ public class DireccionAdapter extends ArrayAdapter<ResultadoDireccion> implement
         this.geocoder = new Geocoder(context, new Locale("es", "CL"));
     }
 
-    // Método vital: MainActivity lo usa para limpiar la lista cuando borras el texto
     public void actualizarDatos(List<ResultadoDireccion> nuevos) {
         if (this.resultados == null) {
             this.resultados = new ArrayList<>();
@@ -89,7 +90,6 @@ public class DireccionAdapter extends ArrayAdapter<ResultadoDireccion> implement
                     List<ResultadoDireccion> lista = new ArrayList<>();
                     String consulta = constraint.toString().trim();
 
-                    // RESCATE DE NÚMERO: Atrapa cualquier dígito escrito
                     String numeroEscrito = "";
                     for (String parte : consulta.split("\\s+")) {
                         if (parte.matches(".*\\d+.*")) {
@@ -101,14 +101,12 @@ public class DireccionAdapter extends ArrayAdapter<ResultadoDireccion> implement
                     try {
                         List<Address> direcciones = null;
 
-                        // 1. Prioridad: Región acotada
                         try {
                             direcciones = geocoder.getFromLocationName(
                                     consulta, 10, -21.0, -70.3, -20.0, -69.8
                             );
                         } catch (Exception ignored) {}
 
-                        // 2. Si falla, buscar a nivel nacional
                         if (direcciones == null || direcciones.isEmpty()) {
                             direcciones = geocoder.getFromLocationName(consulta, 8);
                         }
@@ -161,6 +159,30 @@ public class DireccionAdapter extends ArrayAdapter<ResultadoDireccion> implement
                         e.printStackTrace();
                     }
 
+                    // SOLUCIÓN: Ordenamiento de prioridad
+                    // Fuerza a que los nombres que empiezan exactamente con lo que escribes se vayan arriba de la lista
+                    if (!lista.isEmpty()) {
+                        Collections.sort(lista, new Comparator<ResultadoDireccion>() {
+                            @Override
+                            public int compare(ResultadoDireccion d1, ResultadoDireccion d2) {
+                                String busqueda = consulta.toLowerCase();
+                                String nombre1 = d1.getNombre().toLowerCase();
+                                String nombre2 = d2.getNombre().toLowerCase();
+
+                                boolean empieza1 = nombre1.startsWith(busqueda);
+                                boolean empieza2 = nombre2.startsWith(busqueda);
+
+                                // Si el primero empieza con la búsqueda y el segundo no, el primero va arriba (-1)
+                                if (empieza1 && !empieza2) return -1;
+                                // Si el segundo empieza con la búsqueda y el primero no, el segundo sube (1)
+                                if (!empieza1 && empieza2) return 1;
+
+                                // Si ambos empiezan igual (o ninguno), se ordenan alfabéticamente
+                                return nombre1.compareTo(nombre2);
+                            }
+                        });
+                    }
+
                     filterResults.values = lista;
                     filterResults.count = lista.size();
                 } else {
@@ -173,30 +195,20 @@ public class DireccionAdapter extends ArrayAdapter<ResultadoDireccion> implement
             @SuppressWarnings("unchecked")
             @Override
             protected void publishResults(CharSequence constraint, FilterResults results) {
-                // Asegurarnos de que la lista exista
-                if (resultados == null) {
-                    resultados = new ArrayList<>();
-                }
-
-                // 1. Limpiamos la lista original SIN romper la conexión con la memoria
-                resultados.clear();
-
                 if (results != null && results.values != null) {
-                    // 2. Agregamos los elementos nuevos a la misma lista original
-                    resultados.addAll((List<ResultadoDireccion>) results.values);
-
-                    // 3. Notificamos a la interfaz
+                    resultados = (List<ResultadoDireccion>) results.values;
                     if (results.count > 0) {
-                        notifyDataSetChanged(); // Esto dibujará los resultados y mantendrá la lista abierta
+                        notifyDataSetChanged();
                     } else {
-                        notifyDataSetInvalidated(); // Cierra la lista solo si de verdad hay 0 resultados
+                        notifyDataSetInvalidated();
                     }
                 } else {
+                    if (resultados == null) resultados = new ArrayList<>();
+                    resultados.clear();
                     notifyDataSetInvalidated();
                 }
             }
 
-            // Mantiene el autocompletado visible y evita crasheos al tocar una opción
             @Override
             public CharSequence convertResultToString(Object resultValue) {
                 if (resultValue instanceof ResultadoDireccion) {

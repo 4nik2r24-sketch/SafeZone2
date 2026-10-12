@@ -4,11 +4,7 @@ plugins {
 
 android {
     namespace = "com.example.safezone"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.safezone"
