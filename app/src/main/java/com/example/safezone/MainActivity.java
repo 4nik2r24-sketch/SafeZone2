@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
+import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationManager;
 import android.net.Uri;
@@ -16,6 +17,7 @@ import android.os.Looper;
 import android.telephony.SmsManager;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
@@ -24,13 +26,20 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.firestore.DocumentChange;
+import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -44,9 +53,19 @@ import org.osmdroid.views.overlay.MapEventsOverlay;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.Polygon;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -64,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
         GeoPoint centro;
         int totalReportes;
         Polygon perimetroVisual;
+        List<Marker> marcadores = new ArrayList<>();
 
         ZonaRiesgo(GeoPoint centro, Polygon perimetroVisual) {
             this.centro = centro;
@@ -74,15 +94,20 @@ public class MainActivity extends AppCompatActivity {
 
     private BottomSheetBehavior<View> bottomSheetBehavior;
     private TextView tvTituloSector, tvHorario, tvTipoCrimen, tvDescripcion;
-    private FloatingActionButton btnFlotanteSOS;
+    private FloatingActionButton btnFlotanteSOS, btnFlotanteReportar;
     private CardView btnPerfilContacto;
     private Button btnRutaSegura;
     private MapView mapa;
 
+    private TextView btnFiltroVivo, btnFiltro24h;
     private AutoCompleteTextView txtBuscar;
     private ImageView btnLimpiarBuscador;
     private DireccionAdapter direccionAdapter;
     private Marker marcadorLugarBuscado;
+
+    private final ExecutorService ejecutorRed = Executors.newSingleThreadExecutor();
+    private final Handler handlerDebounce = new Handler(Looper.getMainLooper());
+    private Runnable tareaBusqueda;
 
     private final List<Incidente> listaIncidentes = new ArrayList<>();
     private final List<ZonaRiesgo> listaZonas = new ArrayList<>();
@@ -106,7 +131,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        Configuration.getInstance().setUserAgentValue("SafeZone_Iquique_V4/1.0");
+        try {
+            FirebaseApp.initializeApp(this);
+        } catch (Exception ignored) {}
+
+        File cacheOsm = new File(getCacheDir(), "osmdroid");
+        borrarDirectorio(cacheOsm);
+
+        Configuration.getInstance().setUserAgentValue("SafeZone_Iquique_V5.0");
         Configuration.getInstance().load(this, getSharedPreferences("osmdroid_prefs", MODE_PRIVATE));
         Configuration.getInstance().setTileFileSystemCacheMaxBytes(150L * 1024 * 1024);
 
@@ -129,24 +161,24 @@ public class MainActivity extends AppCompatActivity {
         tvDescripcion = findViewById(R.id.tvDescripcion);
 
         btnFlotanteSOS = findViewById(R.id.btnFlotanteSOS);
+        btnFlotanteReportar = findViewById(R.id.btnFlotanteReportar);
         btnPerfilContacto = findViewById(R.id.btnPerfilContacto);
         btnRutaSegura = findViewById(R.id.btnRutaSegura);
 
         txtBuscar = findViewById(R.id.txtBuscar);
         btnLimpiarBuscador = findViewById(R.id.btnLimpiarBuscador);
-        View cardBuscador = findViewById(R.id.capaSuperior);
 
-        txtBuscar.setThreshold(3);
+        btnFiltroVivo = findViewById(R.id.btnFiltroVivo);
+        btnFiltro24h = findViewById(R.id.btnFiltro24h);
+
+        configurarFiltros();
+
+        txtBuscar.setThreshold(2);
         txtBuscar.setDropDownWidth(ViewGroup.LayoutParams.MATCH_PARENT);
-        if (cardBuscador != null) {
-            txtBuscar.setDropDownAnchor(cardBuscador.getId());
-        }
 
-        // BÚSQUEDA NATIVA: El adaptador se encarga de todo el trabajo pesado en segundo plano
         direccionAdapter = new DireccionAdapter(this);
         txtBuscar.setAdapter(direccionAdapter);
 
-        // Controlamos únicamente la visibilidad del botón "X" para limpiar
         txtBuscar.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -155,6 +187,13 @@ public class MainActivity extends AppCompatActivity {
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 if (btnLimpiarBuscador != null) {
                     btnLimpiarBuscador.setVisibility((s != null && s.length() > 0) ? View.VISIBLE : View.GONE);
+                }
+                if (tareaBusqueda != null) handlerDebounce.removeCallbacks(tareaBusqueda);
+                if (s != null && s.toString().trim().length() >= 2) {
+                    tareaBusqueda = () -> ejecutarBusquedaEnSegundoPlano(s.toString().trim());
+                    handlerDebounce.postDelayed(tareaBusqueda, 350);
+                } else {
+                    direccionAdapter.actualizarDatos(new ArrayList<>());
                 }
             }
             @Override
@@ -188,13 +227,9 @@ public class MainActivity extends AppCompatActivity {
 
                 marcadorLugarBuscado = new Marker(mapa);
                 marcadorLugarBuscado.setPosition(destino);
-                marcadorLugarBuscado.setTitle("Destino Consultado");
+                marcadorLugarBuscado.setTitle("Destino");
                 marcadorLugarBuscado.setSnippet(dir.getNombre());
                 marcadorLugarBuscado.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-
-                // SOLUCIÓN DEFINITIVA DE DISEÑO: Asignamos el ícono vectorial celeste a la búsqueda
-                marcadorLugarBuscado.setIcon(androidx.core.content.ContextCompat.getDrawable(MainActivity.this, R.drawable.ic_pin_busqueda));
-
                 mapa.getOverlays().add(marcadorLugarBuscado);
                 mapa.invalidate();
                 evaluarPanoramaSector(destino, dir.getNombre());
@@ -203,6 +238,7 @@ public class MainActivity extends AppCompatActivity {
 
         if (btnPerfilContacto != null) btnPerfilContacto.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, ContactosActivity.class)));
         if (btnFlotanteSOS != null) btnFlotanteSOS.setOnClickListener(v -> ejecutarProtocoloSOS());
+        if (btnFlotanteReportar != null) btnFlotanteReportar.setOnClickListener(v -> iniciarReporteConUbicacionDispositivo());
         if (btnRutaSegura != null) btnRutaSegura.setOnClickListener(v -> bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED));
 
         MapEventsReceiver receptorEventos = new MapEventsReceiver() {
@@ -219,6 +255,177 @@ public class MainActivity extends AppCompatActivity {
         };
 
         mapa.getOverlays().add(new MapEventsOverlay(receptorEventos));
+
+        cargarIncidentesDesdeFirebase(24);
+
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+        long tiempoHace24Horas = System.currentTimeMillis() - (24 * 60 * 60 * 1000L);
+        java.util.Date fechaFiltro = new java.util.Date(tiempoHace24Horas);
+
+        db.collection("Incidentes")
+                .whereGreaterThan("timestamp", fechaFiltro)
+                .addSnapshotListener((snapshots, error) -> {
+                    if (error != null) return;
+                    if (snapshots != null) {
+                        for (com.google.firebase.firestore.DocumentChange dc : snapshots.getDocumentChanges()) {
+                            if (dc.getType() == com.google.firebase.firestore.DocumentChange.Type.ADDED) {
+                                double lat = dc.getDocument().getDouble("latitud") != null ? dc.getDocument().getDouble("latitud") : 0.0;
+                                double lon = dc.getDocument().getDouble("longitud") != null ? dc.getDocument().getDouble("longitud") : 0.0;
+                                String tipo = dc.getDocument().getString("tipoCrimen");
+                                String desc = dc.getDocument().getString("descripcionDelincuente");
+                                String id = dc.getDocument().getString("idDelito");
+                                String horario = dc.getDocument().getString("horario");
+
+                                boolean existe = false;
+                                for (Incidente i : listaIncidentes) {
+                                    if (i.getIdDelito() != null && i.getIdDelito().equals(id)) {
+                                        existe = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!existe) {
+                                    GeoPoint nuevoPunto = new GeoPoint(lat, lon);
+                                    Incidente nuevoIncidente = new Incidente(id, lat, lon, tipo, desc, horario != null ? horario : "N/A");
+                                    listaIncidentes.add(nuevoIncidente);
+
+                                    Marker nuevoPin = agregarMarcador(nuevoPunto, tipo, horario != null ? horario : "N/A", desc);
+
+                                    ZonaRiesgo zonaCercana = null;
+                                    for (ZonaRiesgo z : listaZonas) {
+                                        if (z.centro.distanceToAsDouble(nuevoPunto) <= 150.0) {
+                                            zonaCercana = z;
+                                            break;
+                                        }
+                                    }
+
+                                    if (zonaCercana != null) {
+                                        zonaCercana.totalReportes++;
+                                        zonaCercana.marcadores.add(nuevoPin);
+                                        actualizarZonaVisual(zonaCercana);
+                                    } else {
+                                        crearNuevaZonaVisual(nuevoPunto, nuevoPin);
+                                    }
+                                    mapa.invalidate();
+                                }
+                            }
+                        }
+                    }
+                });
+    }
+
+    private void configurarFiltros() {
+        if(btnFiltroVivo != null && btnFiltro24h != null) {
+            btnFiltroVivo.setOnClickListener(v -> {
+                btnFiltroVivo.setBackgroundResource(R.drawable.borde_rojo);
+                btnFiltroVivo.setTextColor(Color.BLACK);
+                btnFiltro24h.setBackgroundColor(Color.parseColor("#171B26"));
+                btnFiltro24h.setTextColor(Color.parseColor("#94A3B8"));
+                cargarIncidentesDesdeFirebase(2);
+                Toast.makeText(this, "Filtro En Vivo activado", Toast.LENGTH_SHORT).show();
+            });
+
+            btnFiltro24h.setOnClickListener(v -> {
+                btnFiltro24h.setBackgroundResource(R.drawable.borde_rojo);
+                btnFiltro24h.setTextColor(Color.BLACK);
+                btnFiltroVivo.setBackgroundColor(Color.parseColor("#171B26"));
+                btnFiltroVivo.setTextColor(Color.parseColor("#94A3B8"));
+                cargarIncidentesDesdeFirebase(24);
+                Toast.makeText(this, "Mostrando historial", Toast.LENGTH_SHORT).show();
+            });
+        }
+    }
+
+    private void cargarIncidentesDesdeFirebase(int horasAtras) {
+        long tiempoLimite = System.currentTimeMillis() - (horasAtras * 60 * 60 * 1000L);
+
+        FirebaseFirestore.getInstance().collection("Incidentes")
+                .whereGreaterThan("timestamp", tiempoLimite)
+                .addSnapshotListener((snapshots, error) -> {
+                    if (error != null || snapshots == null) return;
+                    for (DocumentChange dc : snapshots.getDocumentChanges()) {
+                        if (dc.getType() == DocumentChange.Type.ADDED) {
+                            double lat = dc.getDocument().getDouble("latitud") != null ? dc.getDocument().getDouble("latitud") : 0.0;
+                            double lon = dc.getDocument().getDouble("longitud") != null ? dc.getDocument().getDouble("longitud") : 0.0;
+                            String tipo = dc.getDocument().getString("tipoCrimen");
+                            String desc = dc.getDocument().getString("descripcionDelincuente");
+                            String id = dc.getDocument().getString("idDelito");
+                            String horario = dc.getDocument().getString("horario");
+
+                            boolean existe = false;
+                            for (Incidente i : listaIncidentes) {
+                                if (i.getIdDelito() != null && i.getIdDelito().equals(id)) {
+                                    existe = true; break;
+                                }
+                            }
+
+                            if (!existe) {
+                                GeoPoint p = new GeoPoint(lat, lon);
+                                listaIncidentes.add(new Incidente(id, lat, lon, tipo, desc, horario != null ? horario : "Reporte Nube"));
+                                Marker nuevoPin = agregarMarcador(p, tipo, horario != null ? horario : "N/A", desc);
+
+                                ZonaRiesgo zonaCercana = null;
+                                for (ZonaRiesgo z : listaZonas) {
+                                    if (z.centro.distanceToAsDouble(p) <= 150.0) { zonaCercana = z; break; }
+                                }
+                                if (zonaCercana != null) {
+                                    zonaCercana.totalReportes++;
+                                    zonaCercana.marcadores.add(nuevoPin);
+                                    actualizarZonaVisual(zonaCercana);
+                                } else {
+                                    crearNuevaZonaVisual(p, nuevoPin);
+                                }
+                                mapa.invalidate();
+                            }
+                        }
+                    }
+                });
+    }
+
+    private void ejecutarBusquedaEnSegundoPlano(String consulta) {
+        ejecutorRed.execute(() -> {
+            List<ResultadoDireccion> listaSugerencias = new ArrayList<>();
+            HttpURLConnection conn = null;
+            BufferedReader reader = null;
+            try {
+                String queryCod = URLEncoder.encode(consulta, "UTF-8");
+                String urlStr = "https://photon.komoot.io/api/?q=" + queryCod + "&lat=-20.2155&lon=-70.1513&limit=7&lang=es";
+                URL url = new URL(urlStr);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(5000);
+                if (conn.getResponseCode() == 200) {
+                    reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String linea;
+                    while ((linea = reader.readLine()) != null) sb.append(linea);
+
+                    JSONArray features = new JSONObject(sb.toString()).optJSONArray("features");
+                    if (features != null) {
+                        for (int i = 0; i < features.length(); i++) {
+                            JSONObject feat = features.getJSONObject(i);
+                            JSONObject prop = feat.getJSONObject("properties");
+                            JSONArray coord = feat.getJSONObject("geometry").getJSONArray("coordinates");
+
+                            String nombre = prop.optString("name", "").trim();
+                            String calle = prop.optString("street", "").trim();
+                            String ciudad = prop.optString("city", prop.optString("locality", "")).trim();
+                            String titulo = !calle.isEmpty() ? calle : (!nombre.isEmpty() ? nombre : consulta);
+                            String finalLabel = !ciudad.isEmpty() ? titulo + ", " + ciudad : titulo;
+
+                            listaSugerencias.add(new ResultadoDireccion(finalLabel, coord.getDouble(1), coord.getDouble(0)));
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+            } finally {
+                try { if (reader != null) reader.close(); if (conn != null) conn.disconnect(); } catch (Exception ignored) {}
+            }
+            runOnUiThread(() -> {
+                direccionAdapter.actualizarDatos(listaSugerencias);
+                if (!listaSugerencias.isEmpty() && txtBuscar.hasFocus()) txtBuscar.showDropDown();
+            });
+        });
     }
 
     private void evaluarPanoramaSector(GeoPoint puntoConsultado, String nombreLugar) {
@@ -226,104 +433,54 @@ public class MainActivity extends AppCompatActivity {
         for (ZonaRiesgo z : listaZonas) {
             double radioZona = 60.0 + ((z.totalReportes - 1) * 25.0);
             if (z.centro.distanceToAsDouble(puntoConsultado) <= radioZona) {
-                zonaEncontrada = z;
-                break;
+                zonaEncontrada = z; break;
             }
         }
 
-        String encabezado = nombreLugar.contains(",") ? nombreLugar.split(",")[0].trim() : nombreLugar;
-        tvTituloSector.setText("Ubicación: " + (encabezado.length() > 30 ? encabezado.substring(0, 30) + "..." : encabezado));
-
+        tvTituloSector.setText("Ubicación Consultada");
         if (zonaEncontrada != null) {
             int total = zonaEncontrada.totalReportes;
             tvTipoCrimen.setText(total <= 4 ? "🟠 PELIGRO: " + total + " Reportes" : "🔴 ZONA CRÍTICA: " + total + " Delitos");
             tvHorario.setText("Nivel de Riesgo: Elevado");
-            tvDescripcion.setText("Incidentes recientes en este cuadrante.");
+            tvDescripcion.setText("Incidentes ocurridos recientemente en este cuadrante.");
         } else {
             tvTipoCrimen.setText("🛡️ SECTOR SEGURO / SIN REPORTES");
             tvHorario.setText("Estado: Despejado");
-            tvDescripcion.setText("No se registran incidentes en un radio de 300 metros.");
+            tvDescripcion.setText("No se registran incidentes recientes a la redonda.");
         }
-
         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
     }
+
     private void ejecutarProtocoloSOS() {
-        if (androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.CALL_PHONE) != android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.SEND_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                androidx.core.app.ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-
-            androidx.core.app.ActivityCompat.requestPermissions(this, new String[]{
-                    android.Manifest.permission.CALL_PHONE,
-                    android.Manifest.permission.SEND_SMS,
-                    android.Manifest.permission.ACCESS_FINE_LOCATION}, 200);
-            return;
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED ||
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            solicitarPermisos(); return;
         }
 
-        java.util.List<Contacto> contactos = obtenerContactosEmergencia();
+        List<Contacto> contactos = obtenerContactosEmergencia();
         if (contactos.isEmpty()) {
-            android.widget.Toast.makeText(this, "Agrega tus contactos primero.", android.widget.Toast.LENGTH_LONG).show();
-            startActivity(new android.content.Intent(MainActivity.this, ContactosActivity.class));
+            Toast.makeText(this, "Agrega contactos de emergencia.", Toast.LENGTH_LONG).show();
+            startActivity(new Intent(MainActivity.this, ContactosActivity.class));
             return;
         }
 
-        android.widget.Toast.makeText(this, "Iniciando SOS y rastreando ubicación en vivo...", android.widget.Toast.LENGTH_SHORT).show();
-
-        // 1. Ejecutar la llamada de inmediato al Contacto 1 para no perder tiempo
-        String telefonoLlamada = contactos.get(0).getTelefono();
-        android.content.Intent callIntent = new android.content.Intent(android.content.Intent.ACTION_CALL);
-        callIntent.setData(android.net.Uri.parse("tel:" + telefonoLlamada));
-        startActivity(callIntent);
-
-        // 2. Obligar al GPS a dar una coordenada en tiempo real para el SMS
-        if (contactos.size() >= 2) {
-            android.location.LocationManager lm = (android.location.LocationManager) getSystemService(android.content.Context.LOCATION_SERVICE);
-            if (lm != null) {
-                // Intenta primero con la máxima precisión satelital (GPS_PROVIDER)
-                lm.requestSingleUpdate(android.location.LocationManager.GPS_PROVIDER, new android.location.LocationListener() {
-                    @Override
-                    public void onLocationChanged(android.location.Location location) {
-                        enviarSMSEmergencia(contactos.get(1), location);
-                    }
-                    @Override public void onStatusChanged(String provider, int status, android.os.Bundle extras) {}
-                    @Override public void onProviderEnabled(String provider) {}
-                    @Override public void onProviderDisabled(String provider) {
-                        // Si falla o el usuario está en interiores, cambia a la antena de celular (NETWORK_PROVIDER)
-                        lm.requestSingleUpdate(android.location.LocationManager.NETWORK_PROVIDER, new android.location.LocationListener() {
-                            @Override
-                            public void onLocationChanged(android.location.Location location) {
-                                enviarSMSEmergencia(contactos.get(1), location);
-                            }
-                            @Override public void onStatusChanged(String provider, int status, android.os.Bundle extras) {}
-                            @Override public void onProviderEnabled(String provider) {}
-                            @Override public void onProviderDisabled(String provider) {
-                                // Último recurso: usar la caché si ambos sensores fallan
-                                enviarSMSEmergencia(contactos.get(1), lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER));
-                            }
-                        }, null);
-                    }
-                }, null);
-            }
-        }
-    }
-
-    private void enviarSMSEmergencia(Contacto contactoSecundario, android.location.Location ubicacionReal) {
         String mensajeSMS = "¡ALERTA SOS! Me encuentro en peligro.";
-
-        if (ubicacionReal != null) {
-            mensajeSMS += " Mi ubicación exacta EN VIVO: https://maps.google.com/?q=" + ubicacionReal.getLatitude() + "," + ubicacionReal.getLongitude();
-        } else {
-            mensajeSMS += " (Sin señal satelital disponible).";
+        LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        if (lm != null && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            Location loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            if (loc == null) loc = lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
+            if (loc != null) mensajeSMS += " Mi ubicación exacta: https://maps.google.com/?q=" + loc.getLatitude() + "," + loc.getLongitude();
         }
 
         try {
-            android.telephony.SmsManager smsManager = android.telephony.SmsManager.getDefault();
-            // sendMultipartTextMessage asegura que el enlace largo de Google Maps no se corte
-            java.util.ArrayList<String> partes = smsManager.divideMessage(mensajeSMS);
-            smsManager.sendMultipartTextMessage(contactoSecundario.getTelefono(), null, partes, null, null);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+            if (contactos.size() >= 2) SmsManager.getDefault().sendTextMessage(contactos.get(1).getTelefono(), null, mensajeSMS, null, null);
+        } catch (Exception ignored) {}
+
+        Intent callIntent = new Intent(Intent.ACTION_CALL);
+        callIntent.setData(Uri.parse("tel:" + contactos.get(0).getTelefono()));
+        startActivity(callIntent);
     }
+
     private List<Contacto> obtenerContactosEmergencia() {
         List<Contacto> lista = new ArrayList<>();
         SharedPreferences prefs = getSharedPreferences("SafeZoneContactosPrefs", MODE_PRIVATE);
@@ -385,10 +542,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void procesarNuevoReporte(double lat, double lon, String tipo, String horario, String desc) {
+        String idGenerado = String.valueOf(System.currentTimeMillis());
+
+        Map<String, Object> reporteNube = new HashMap<>();
+        reporteNube.put("idDelito", idGenerado);
+        reporteNube.put("latitud", lat);
+        reporteNube.put("longitud", lon);
+        reporteNube.put("tipoCrimen", tipo);
+        reporteNube.put("descripcionDelincuente", desc);
+        reporteNube.put("horario", horario);
+        reporteNube.put("timestamp", FieldValue.serverTimestamp());
+
+        FirebaseFirestore.getInstance().collection("Incidentes").document(idGenerado).set(reporteNube)
+                .addOnSuccessListener(aVoid -> Toast.makeText(this, "Alerta enviada a la red", Toast.LENGTH_SHORT).show())
+                .addOnFailureListener(e -> Toast.makeText(this, "Error de conexión", Toast.LENGTH_SHORT).show());
+
         GeoPoint nuevoPunto = new GeoPoint(lat, lon);
-        Incidente nuevoIncidente = new Incidente(String.valueOf(System.currentTimeMillis()), lat, lon, tipo, desc, horario);
+        Incidente nuevoIncidente = new Incidente(idGenerado, lat, lon, tipo, desc, horario);
         listaIncidentes.add(nuevoIncidente);
-        agregarMarcador(nuevoPunto, tipo, horario, desc);
+
+        Marker nuevoPin = agregarMarcador(nuevoPunto, tipo, horario, desc);
 
         ZonaRiesgo zonaCercana = null;
         for (ZonaRiesgo z : listaZonas) {
@@ -400,41 +573,66 @@ public class MainActivity extends AppCompatActivity {
 
         if (zonaCercana != null) {
             zonaCercana.totalReportes++;
+            zonaCercana.marcadores.add(nuevoPin);
             actualizarZonaVisual(zonaCercana);
         } else {
-            Polygon perimetro = new Polygon();
-            perimetro.setPoints(Polygon.pointsAsCircle(nuevoPunto, 60.0));
-            perimetro.getOutlinePaint().setColor(Color.parseColor("#10B981"));
-            perimetro.getOutlinePaint().setStrokeWidth(3.0f);
-            perimetro.getFillPaint().setColor(Color.argb(60, 16, 185, 129));
-            mapa.getOverlays().add(0, perimetro);
-            listaZonas.add(new ZonaRiesgo(nuevoPunto, perimetro));
+            crearNuevaZonaVisual(nuevoPunto, nuevoPin);
         }
         mapa.getController().animateTo(nuevoPunto);
         mapa.invalidate();
     }
 
+    // MÉTODO NUEVO: Fuerza la asignación del color al pin desde cero
+    private void cambiarColorPin(Marker pin, int colorHex) {
+        Drawable icono = ContextCompat.getDrawable(this, org.osmdroid.library.R.drawable.marker_default);
+        if (icono != null) {
+            icono = icono.mutate();
+            icono.setColorFilter(colorHex, PorterDuff.Mode.SRC_IN);
+            pin.setIcon(icono);
+        }
+    }
+
+    private void crearNuevaZonaVisual(GeoPoint punto, Marker pinInicial) {
+        Polygon perimetro = new Polygon();
+        perimetro.setPoints(Polygon.pointsAsCircle(punto, 60.0));
+
+        int colorHexVerde = Color.parseColor("#10B981");
+        perimetro.getOutlinePaint().setColor(colorHexVerde);
+        perimetro.getOutlinePaint().setStrokeWidth(3.0f);
+        perimetro.getFillPaint().setColor(Color.argb(60, 16, 185, 129));
+
+        // Pinta el primer pin de verde
+        cambiarColorPin(pinInicial, colorHexVerde);
+
+        mapa.getOverlays().add(0, perimetro);
+
+        ZonaRiesgo nuevaZona = new ZonaRiesgo(punto, perimetro);
+        nuevaZona.marcadores.add(pinInicial);
+        listaZonas.add(nuevaZona);
+    }
+
     private void actualizarZonaVisual(ZonaRiesgo zona) {
         double radio = 60.0 + ((zona.totalReportes - 1) * 25.0);
         zona.perimetroVisual.setPoints(Polygon.pointsAsCircle(zona.centro, radio));
+
         int colorBorde = (zona.totalReportes == 2) ? Color.parseColor("#FBBF24") : (zona.totalReportes <= 4 ? Color.parseColor("#F97316") : Color.parseColor("#EF4444"));
         int colorRelleno = (zona.totalReportes == 2) ? Color.argb(70, 251, 191, 36) : (zona.totalReportes <= 4 ? Color.argb(80, 249, 115, 22) : Color.argb(95, 239, 68, 68));
+
         zona.perimetroVisual.getOutlinePaint().setColor(colorBorde);
         zona.perimetroVisual.getFillPaint().setColor(colorRelleno);
+
+        // Actualiza TODOS los pines que están dentro de este círculo para que tengan el mismo color
+        for (Marker pin : zona.marcadores) {
+            cambiarColorPin(pin, colorBorde);
+        }
     }
 
-    private void agregarMarcador(GeoPoint punto, String tipoCrimen, String horario, String descripcion) {
+    private Marker agregarMarcador(GeoPoint punto, String tipoCrimen, String horario, String descripcion) {
         Marker marcador = new Marker(mapa);
         marcador.setPosition(punto);
         marcador.setTitle(tipoCrimen);
         marcador.setSnippet(descripcion);
         marcador.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-
-        // SOLUCIÓN BUG: Forzamos el color ROJO explícitamente para que no herede la forma ni tinte del buscador
-        if (marcador.getIcon() != null) {
-            marcador.getIcon().mutate().clearColorFilter();
-            marcador.getIcon().mutate().setColorFilter(Color.parseColor("#EF4444"), PorterDuff.Mode.SRC_IN);
-        }
 
         marcador.setOnMarkerClickListener((marker, mapView) -> {
             tvTituloSector.setText("Incidente Reportado");
@@ -446,12 +644,8 @@ public class MainActivity extends AppCompatActivity {
         });
         mapa.getOverlays().add(marcador);
         mapa.invalidate();
+        return marcador;
     }
-
-    @Override
-    protected void onResume() { super.onResume(); if (mapa != null) mapa.onResume(); }
-    @Override
-    protected void onPause() { super.onPause(); if (mapa != null) mapa.onPause(); }
 
     private void borrarDirectorio(File dir) {
         if (dir != null && dir.isDirectory()) {
@@ -460,4 +654,10 @@ public class MainActivity extends AppCompatActivity {
             dir.delete();
         }
     }
+
+    @Override
+    protected void onResume() { super.onResume(); if (mapa != null) mapa.onResume(); }
+
+    @Override
+    protected void onPause() { super.onPause(); if (mapa != null) mapa.onPause(); }
 }

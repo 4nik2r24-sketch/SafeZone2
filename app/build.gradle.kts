@@ -1,5 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
+    // Este plugin es el que lee tu archivo google-services.json
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -39,9 +41,16 @@ dependencies {
     implementation(libs.appcompat)
     implementation(libs.constraintlayout)
     implementation(libs.material)
-    implementation(libs.navigation.fragment)
-    implementation(libs.navigation.ui)
+
+    // 1. El BOM de Firebase (Controlador maestro de versiones)
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+
+    // 2. La base de datos Firestore (El BOM le asigna la versión automáticamente)
+    implementation("com.google.firebase:firebase-firestore")
+
+    // Mapa OSMDroid
     implementation("org.osmdroid:osmdroid-android:6.1.18")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
